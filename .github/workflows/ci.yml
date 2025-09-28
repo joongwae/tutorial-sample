@@ -8,13 +8,13 @@ on:
 
 env:
   MVN_VERSION: "3.9.6"
-  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+  # Remove DOCKERHUB_USERNAME since we're using GHCR
 
 permissions:
   security-events: write
   actions: read
   contents: read
-  packages: read
+  packages: write # Changed from 'read' to 'write' for pushing to GHCR
 
 jobs:
   pipeline:
@@ -111,7 +111,14 @@ jobs:
           sarif_file: "trivy-results.sarif"
           category: "trivy-filesystem"
 
-      - name: Build Docker Image
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image to GHCR
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             deployEnv="prod"
@@ -124,24 +131,25 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
-          DOCKER_IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
+          # GHCR image naming convention
+          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"
+          DOCKER_IMAGE_TAG="${IMAGE_NAME}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
+          LATEST_TAG="${IMAGE_NAME}:${deployEnv}-latest"
 
           echo "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}" >> $GITHUB_ENV
+          echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_ENV
 
           # Build using Spring Boot's build-image goal
           mvn spring-boot:build-image \
             -DskipTests \
             -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_TAG}
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          # Tag the image with latest for the environment
+          docker tag ${DOCKER_IMAGE_TAG} ${LATEST_TAG}
 
-      - name: Push Docker Image
-        run: |
-          docker push ${{ env.DOCKER_IMAGE_TAG }}
+          # Push both tags
+          docker push ${DOCKER_IMAGE_TAG}
+          docker push ${LATEST_TAG}
 
       - name: Docker Image Scan
         uses: aquasecurity/trivy-action@master
@@ -157,6 +165,16 @@ jobs:
         with:
           sarif_file: "trivy-image-results.sarif"
           category: "trivy-container"
+
+      - name: Output Image Information
+        run: |
+          echo "Successfully built and pushed the following images:"
+          echo "Specific version: ${{ env.DOCKER_IMAGE_TAG }}"
+          echo "Latest for environment: ${{ env.LATEST_TAG }}"
+
+          # Output the image pull command for reference
+          echo "To pull the image, use:"
+          echo "docker pull ${{ env.DOCKER_IMAGE_TAG }}"
 
       - name: Clean Up
         run: |
