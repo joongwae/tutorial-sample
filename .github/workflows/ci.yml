@@ -133,7 +133,7 @@ jobs:
           if [ -f "trivy-results.sarif" ]; then
             echo "Uploading filesystem scan results..."
             curl -X POST \
-              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
               -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$(base64 -w0 trivy-results.sarif)\"}"
@@ -142,7 +142,7 @@ jobs:
           if [ -f "trivy-image-results.sarif" ]; then
             echo "Uploading Docker image scan results..."
             curl -X POST \
-              -H "Authorization: Bearer ${{ github.token }}" \
+              -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
               -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$(base64 -w0 trivy-image-results.sarif)\"}"
