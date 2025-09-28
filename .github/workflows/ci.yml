@@ -11,11 +11,10 @@ env:
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 permissions:
-  # required for all workflows
   security-events: write
-  # only required for workflows in private repositories
   actions: read
   contents: read
+  packages: read
 
 jobs:
   pipeline:
