@@ -28,6 +28,7 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<docker.registry>ghcr.io</docker.registry>
 		<dockerImageName>joongwae/tutorial-${project.artifactId}</dockerImageName>
 	</properties>
 	<dependencies>
