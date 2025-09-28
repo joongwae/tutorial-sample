@@ -1,0 +1,133 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  MVN_VERSION: "3.9.6"
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        environment: [prod, uat]
+        include:
+          - branch: main
+            environment: prod
+          - branch: develop
+            environment: uat
+
+    environment:
+      name: ${{ matrix.environment }}
+
+    steps:
+      - name: Start Pipeline
+        run: |
+          echo "Running pipeline for project using ${{ env.TECHNOLOGY }} in ${{ matrix.environment }}"
+          echo "Branch: ${{ github.ref }}"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: "temurin"
+          cache: "maven"
+
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v4
+        with:
+          maven-version: ${{ env.MVN_VERSION }}
+      - name: Run Unit Tests
+        run: |
+          mvn clean test
+      - name: Archive Test Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            **/target/surefire-reports/
+            **/target/failsafe-reports/
+          retention-days: 30
+
+      - name: Archive and Fingerprint Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            **/target/*.jar
+          retention-days: 30
+
+      - name: Trivy Filesystem Security Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "sarif"
+          output: "trivy-results.sarif"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
+
+      - name: Build Docker Image
+        run: |
+          # Determine environment and tags
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            deployEnv="prod"
+          elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
+            deployEnv="uat"
+          else
+            deployEnv="dev"
+          fi
+
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          BUILD_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+
+          DOCKER_IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${deployEnv}-${SHORT_SHA}-${BUILD_VERSION}"
+
+          echo "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}" >> $GITHUB_ENV
+
+          mvn clean spring-boot:build-image \
+            -DskipTests \
+            -DdockerImageName=${DOCKER_IMAGE_TAG}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.DOCKER_IMAGE_TAG }}
+
+      - name: Docker Image Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.DOCKER_IMAGE_TAG }}
+          format: "sarif"
+          output: "trivy-image-results.sarif"
+
+      - name: Upload Docker scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-image-results.sarif"
+
+      - name: Clean Up
+        run: |
+          # Clean up any temporary resources
+          docker system prune -f
