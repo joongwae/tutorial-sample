@@ -10,11 +10,12 @@ env:
   MVN_VERSION: "3.9.6"
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
-# permissions:
-#   security-events: write
-#   actions: read
-#   contents: read
-#   packages: read
+permissions:
+  # required for all workflows
+  security-events: write
+  # only required for workflows in private repositories
+  actions: read
+  contents: read
 
 jobs:
   pipeline:
