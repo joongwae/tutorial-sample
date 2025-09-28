@@ -135,7 +135,8 @@ jobs:
           # Build OCI image directly to GHCR using Spring Boot Maven plugin
           mvn spring-boot:build-image \
             -DskipTests \
-            -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_TAG} \
+            -DdockerImageName=${DOCKER_IMAGE_TAG} \
+            -Ddocker.registry=docker.io \
             -Dspring-boot.build-image.publish=true \
             -Dspring-boot.build-image.verboseLogging=true
 
