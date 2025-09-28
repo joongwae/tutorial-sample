@@ -8,12 +8,13 @@ on:
 
 env:
   MVN_VERSION: "3.9.6"
+  DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
 permissions:
   security-events: write
   actions: read
   contents: read
-  packages: write
+  packages: read
 
 jobs:
   pipeline:
@@ -53,12 +54,13 @@ jobs:
         uses: stCarolas/setup-maven@v5
         with:
           maven-version: ${{ env.MVN_VERSION }}
-
-      - name: Build Application and Run Tests
+      - name: Build Application
         run: |
-          mvn clean package
-        env:
-          MAVEN_OPTS: -Dmaven.test.failure.ignore=false
+          mvn clean package -DskipTests
+
+      - name: Run Unit Tests
+        run: |
+          mvn clean test
 
       - name: Generate Unique Artifact Name
         id: artifact-name
@@ -82,7 +84,6 @@ jobs:
           name: build-artifacts-${{ steps.artifact-name.outputs.artifact_suffix }}
           path: |
             **/target/*.jar
-            **/target/*.war
           retention-days: 30
 
       - name: Trivy Filesystem Security Scan
@@ -93,7 +94,6 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           exit-code: 0
-
       - name: Upload Trivy Filesystem scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
@@ -101,17 +101,7 @@ jobs:
           sarif_file: "trivy-results.sarif"
           category: "trivy-filesystem"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push OCI Image to GHCR
+      - name: Build Docker Image
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             deployEnv="prod"
@@ -124,26 +114,23 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
-          # GHCR image naming
-          GHCR_IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"
-          DOCKER_IMAGE_TAG="${GHCR_IMAGE_NAME}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
-          LATEST_TAG="${GHCR_IMAGE_NAME}:${deployEnv}-latest"
+          DOCKER_IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
 
           echo "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}" >> $GITHUB_ENV
-          echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_ENV
 
-          # Build OCI image directly to GHCR using Spring Boot Maven plugin
-          mvn spring-boot:build-image \
+          mvn clean spring-boot:build-image \
             -DskipTests \
-            -DdockerImageName=${DOCKER_IMAGE_TAG} \
-            -Ddocker.registry=docker.io \
-            -Dspring-boot.build-image.publish=true \
-            -Dspring-boot.build-image.verboseLogging=true
+            -DdockerImageName=${DOCKER_IMAGE_TAG}
 
-          # Tag and push latest using Docker CLI (since Maven plugin built and published the main tag)
-          docker pull ${DOCKER_IMAGE_TAG}
-          docker tag ${DOCKER_IMAGE_TAG} ${LATEST_TAG}
-          docker push ${LATEST_TAG}
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ env.DOCKER_IMAGE_TAG }}
 
       - name: Docker Image Scan
         uses: aquasecurity/trivy-action@master
@@ -152,25 +139,12 @@ jobs:
           format: "sarif"
           output: "trivy-image-results.sarif"
           exit-code: 0
-
       - name: Upload Docker scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: "trivy-image-results.sarif"
           category: "trivy-container"
-
-      - name: Output Image Information
-        run: |
-          echo "Successfully built and pushed OCI images to GHCR:"
-          echo "Specific version: ${{ env.DOCKER_IMAGE_TAG }}"
-          echo "Latest for environment: ${{ env.LATEST_TAG }}"
-
-          echo "To pull the image, use:"
-          echo "docker pull ${{ env.DOCKER_IMAGE_TAG }}"
-
-          echo "Image digest information:"
-          docker inspect ${{ env.DOCKER_IMAGE_TAG }} --format='{{.RepoDigests}}'
 
       - name: Clean Up
         run: |
