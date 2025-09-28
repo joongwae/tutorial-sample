@@ -120,7 +120,8 @@ jobs:
 
           mvn clean spring-boot:build-image \
             -DskipTests \
-            -DdockerImageName=${DOCKER_IMAGE_TAG}
+            -DdockerImageName=${DOCKER_IMAGE_TAG} \
+            -Ddocker.registry=docker.io
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
