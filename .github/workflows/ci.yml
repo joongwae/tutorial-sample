@@ -10,7 +10,6 @@ env:
   MVN_VERSION: "3.9.6"
   DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
 
-# Enhanced permissions
 permissions:
   security-events: write
   actions: read
@@ -60,10 +59,17 @@ jobs:
         run: |
           mvn clean test
 
+      - name: Generate Unique Artifact Name
+        id: artifact-name
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          echo "artifact_suffix=${SHORT_SHA}_${TIMESTAMP}" >> $GITHUB_OUTPUT
+
       - name: Archive Test Results
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ steps.artifact-name.outputs.artifact_suffix }}
           path: |
             **/target/surefire-reports/
             **/target/failsafe-reports/
@@ -72,11 +78,12 @@ jobs:
       - name: Archive and Fingerprint Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-artifacts
+          name: build-artifacts-${{ steps.artifact-name.outputs.artifact_suffix }}
           path: |
             **/target/*.jar
           retention-days: 30
 
+      # ... rest of your steps remain the same
       - name: Trivy Filesystem Security Scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -88,7 +95,6 @@ jobs:
 
       - name: Build Docker Image
         run: |
-          # Determine environment and tags
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
             deployEnv="prod"
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
@@ -129,23 +135,25 @@ jobs:
       - name: Upload Security Scan Results
         if: always()
         run: |
-          # Check if SARIF files exist and upload them
+          # Upload filesystem scan results
           if [ -f "trivy-results.sarif" ]; then
             echo "Uploading filesystem scan results..."
+            SARIF_BASE64=$(base64 -w0 trivy-results.sarif)
             curl -X POST \
               -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
-              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$(base64 -w0 trivy-results.sarif)\"}"
+              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$SARIF_BASE64\"}"
           fi
 
           if [ -f "trivy-image-results.sarif" ]; then
             echo "Uploading Docker image scan results..."
+            SARIF_BASE64=$(base64 -w0 trivy-image-results.sarif)
             curl -X POST \
               -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
-              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$(base64 -w0 trivy-image-results.sarif)\"}"
+              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$SARIF_BASE64\"}"
           fi
 
       - name: Clean Up
