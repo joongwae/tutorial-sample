@@ -8,13 +8,12 @@ on:
 
 env:
   MVN_VERSION: "3.9.6"
-  # Remove DOCKERHUB_USERNAME since we're using GHCR
 
 permissions:
   security-events: write
   actions: read
   contents: read
-  packages: write # Changed from 'read' to 'write' for pushing to GHCR
+  packages: write
 
 jobs:
   pipeline:
@@ -59,7 +58,6 @@ jobs:
         run: |
           mvn clean package
         env:
-          # This ensures tests run during the package phase
           MAVEN_OPTS: -Dmaven.test.failure.ignore=false
 
       - name: Generate Unique Artifact Name
@@ -131,15 +129,15 @@ jobs:
           SHORT_SHA=$(git rev-parse --short HEAD)
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
-          # GHCR image naming convention
-          IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"
-          DOCKER_IMAGE_TAG="${IMAGE_NAME}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
-          LATEST_TAG="${IMAGE_NAME}:${deployEnv}-latest"
+          # GHCR image naming - override the dockerImageName property
+          GHCR_IMAGE_NAME="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}"
+          DOCKER_IMAGE_TAG="${GHCR_IMAGE_NAME}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
+          LATEST_TAG="${GHCR_IMAGE_NAME}:${deployEnv}-latest"
 
           echo "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}" >> $GITHUB_ENV
           echo "LATEST_TAG=${LATEST_TAG}" >> $GITHUB_ENV
 
-          # Build using Spring Boot's build-image goal
+          # Build using Spring Boot's build-image goal with GHCR image name
           mvn spring-boot:build-image \
             -DskipTests \
             -Dspring-boot.build-image.imageName=${DOCKER_IMAGE_TAG}
@@ -168,11 +166,10 @@ jobs:
 
       - name: Output Image Information
         run: |
-          echo "Successfully built and pushed the following images:"
+          echo "Successfully built and pushed the following images to GHCR:"
           echo "Specific version: ${{ env.DOCKER_IMAGE_TAG }}"
           echo "Latest for environment: ${{ env.LATEST_TAG }}"
 
-          # Output the image pull command for reference
           echo "To pull the image, use:"
           echo "docker pull ${{ env.DOCKER_IMAGE_TAG }}"
 
