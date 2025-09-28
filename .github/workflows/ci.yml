@@ -51,22 +51,22 @@ jobs:
       - name: Run Unit Tests
         run: |
           mvn clean test
-      - name: Archive Test Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: |
-            **/target/surefire-reports/
-            **/target/failsafe-reports/
-          retention-days: 30
+      # - name: Archive Test Results
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: test-results
+      #     path: |
+      #       **/target/surefire-reports/
+      #       **/target/failsafe-reports/
+      #     retention-days: 30
 
-      - name: Archive and Fingerprint Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: |
-            **/target/*.jar
-          retention-days: 30
+      # - name: Archive and Fingerprint Artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: build-artifacts
+      #     path: |
+      #       **/target/*.jar
+      #     retention-days: 30
 
       - name: Trivy Filesystem Security Scan
         uses: aquasecurity/trivy-action@master
