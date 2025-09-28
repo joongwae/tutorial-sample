@@ -83,7 +83,6 @@ jobs:
             **/target/*.jar
           retention-days: 30
 
-      # ... rest of your steps remain the same
       - name: Trivy Filesystem Security Scan
         uses: aquasecurity/trivy-action@master
         with:
@@ -92,11 +91,12 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           exit-code: 0
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload Trivy Filesystem scan results
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: "trivy-results.sarif"
+          category: "trivy-filesystem"
 
       - name: Build Docker Image
         run: |
@@ -141,6 +141,7 @@ jobs:
         if: always()
         with:
           sarif_file: "trivy-image-results.sarif"
+          category: "trivy-container"
 
       - name: Clean Up
         run: |
