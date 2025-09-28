@@ -75,6 +75,10 @@ jobs:
           scan-ref: "."
           format: "sarif"
           output: "trivy-results.sarif"
+      - name: Debug Trivy Scan Output
+        run: |
+          ls -l 
+          cat trivy-results.sarif
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
