@@ -39,19 +39,19 @@ jobs:
           echo "Branch: ${{ github.ref }}"
 
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: "21"
           distribution: "temurin"
           cache: "maven"
 
       - name: Set up Maven
-        uses: stCarolas/setup-maven@v4
+        uses: stCarolas/setup-maven@v5
         with:
           maven-version: ${{ env.MVN_VERSION }}
 
@@ -92,6 +92,11 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           exit-code: 0
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"
 
       - name: Build Docker Image
         run: |
@@ -131,30 +136,11 @@ jobs:
           format: "sarif"
           output: "trivy-image-results.sarif"
           exit-code: 0
-
-      - name: Upload Security Scan Results
+      - name: Upload Docker scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
-        run: |
-          # Upload filesystem scan results
-          if [ -f "trivy-results.sarif" ]; then
-            echo "Uploading filesystem scan results..."
-            SARIF_BASE64=$(base64 -w0 trivy-results.sarif)
-            curl -X POST \
-              -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
-              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$SARIF_BASE64\"}"
-          fi
-
-          if [ -f "trivy-image-results.sarif" ]; then
-            echo "Uploading Docker image scan results..."
-            SARIF_BASE64=$(base64 -w0 trivy-image-results.sarif)
-            curl -X POST \
-              -H "Authorization: Bearer ${{ github.PAT_TOKEN }}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              https://api.github.com/repos/${{ github.repository }}/code-scanning/sarifs \
-              -d "{\"commit_sha\":\"${{ github.sha }}\",\"ref\":\"${{ github.ref }}\",\"sarif\":\"$SARIF_BASE64\"}"
-          fi
+        with:
+          sarif_file: "trivy-image-results.sarif"
 
       - name: Clean Up
         run: |
