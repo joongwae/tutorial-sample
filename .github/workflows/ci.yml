@@ -54,6 +54,9 @@ jobs:
         uses: stCarolas/setup-maven@v5
         with:
           maven-version: ${{ env.MVN_VERSION }}
+      - name: Build Application
+        run: |
+          mvn clean package -DskipTests
 
       - name: Run Unit Tests
         run: |
@@ -109,9 +112,9 @@ jobs:
           fi
 
           SHORT_SHA=$(git rev-parse --short HEAD)
-          BUILD_VERSION=$(mvn help:evaluate -Dexpression=project.version -q -DforceStdout)
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
 
-          DOCKER_IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${deployEnv}-${SHORT_SHA}-${BUILD_VERSION}"
+          DOCKER_IMAGE_TAG="${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}:${deployEnv}-${SHORT_SHA}-${TIMESTAMP}"
 
           echo "DOCKER_IMAGE_TAG=${DOCKER_IMAGE_TAG}" >> $GITHUB_ENV
 
